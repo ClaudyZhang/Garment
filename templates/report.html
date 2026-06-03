@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>报告查看 · 极净奢护</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  :root {
+    --radius: 6px;
+    --radius-lg: 10px;
+  }
+
+  /* ─── 确认状态栏 ─── */
+  .verify-bar {
+    margin-bottom: 16px;
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
+    transition: all 0.3s ease;
+  }
+  .verify-bar.unverified {
+    background: #FFF8E1;
+    border: 1px solid #F5D97E;
+  }
+  .verify-bar.unverified .verify-title { color: #C4943A; }
+  .verify-bar.verified {
+    background: #EFF8F2;
+    border: 1px solid #7BAF8A;
+  }
+  .verify-bar.verified .verify-title { color: #4A7C59; }
+
+  .verify-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 1px;
+  }
+
+  .verify-subtitle {
+    font-size: 12px;
+    color: #8B7355;
+    line-height: 1.6;
+  }
+
+  /* ─── 验证码输入 ─── */
+  .code-input-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    align-items: center;
+  }
+  .code-input-group input {
+    width: 160px;
+    padding: 10px 14px;
+    border: 2px solid #E8DFD3;
+    border-radius: var(--radius);
+    font-size: 18px;
+    text-align: center;
+    letter-spacing: 8px;
+    font-family: monospace;
+    outline: none;
+    background: #fff;
+    transition: border-color 0.2s;
+  }
+  .code-input-group input:focus {
+    border-color: #C8B299;
+  }
+  .code-input-group input.error {
+    border-color: #E88;
+    background: #FFF5F5;
+  }
+  .code-input-group input.valid {
+    border-color: #7BAF8A;
+    background: #F6FAF7;
+  }
+  .btn-verify {
+    padding: 10px 20px;
+    background: #C8B299;
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    transition: background 0.2s;
+  }
+  .btn-verify:hover { background: #B09A80; }
+  .btn-verify:disabled { background: #D8C8B5; cursor: not-allowed; }
+
+  .btn-resend {
+    background: none;
+    border: none;
+    color: #8B7355;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+    margin-top: 4px;
+  }
+  .btn-resend:disabled { color: #C8B8A0; cursor: not-allowed; text-decoration: none; }
+
+  /* ─── 发送报告链接按钮 ─── */
+  .btn-send-link {
+    padding: 8px 16px;
+    background: #fff;
+    color: #4A7C59;
+    border: 1.5px solid #7BAF8A;
+    border-radius: var(--radius);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .btn-send-link:hover { background: #EFF8F2; border-color: #4A7C59; }
+  .btn-send-link:disabled { background: #F5F5F0; border-color: #D8D0C0; color: #B0A898; cursor: not-allowed; }
+  .btn-send-link.sent { background: #EFF8F2; border-color: #4A7C59; color: #4A7C59; }
+
+  /* ─── 确认印章 ─── */
+  .verify-stamp {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .stamp-img {
+    width: 64px;
+    height: 64px;
+    border: 3px solid #4A7C59;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4A7C59;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-align: center;
+    line-height: 1.3;
+    transform: rotate(-8deg);
+    flex-shrink: 0;
+  }
+  .stamp-info {
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* ─── 报告标签 ─── */
+  .report-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+  }
+  .report-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: #FAF7F2;
+    color: #A0927B;
+    transition: all 0.2s;
+  }
+  .report-tab:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .report-tab:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .report-tab.active {
+    background: #fff;
+    color: #3D322B;
+    font-weight: 500;
+    border-bottom-color: #fff;
+  }
+  .report-frame {
+    width: 100%;
+    height: 72vh;
+    border: 1px solid #E8DFD3;
+    border-radius: var(--radius-lg);
+    background: #fff;
+  }
+
+  /* ─── Toast ─── */
+  .toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #3D322B;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 20px;
+    font-size: 13px;
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ─── 加载动画 ─── */
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── 响应式 ─── */
+  @media (max-width: 480px) {
+    .code-input-group { flex-direction: column; align-items: stretch; }
+    .code-input-group input { width: 100%; }
+    .btn-verify { width: 100%; }
+    .report-frame { height: 50vh; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/dashboard" style="text-decoration:none;color:var(--earth);font-size:14px;">&larr; 后台</a>
+  <div class="nav-brand">CLARITY</div>
+  <div style="width:40px"></div>
+</nav>
+
+<div class="container">
+  <div style="text-align:center;margin-bottom:12px;">
+    <h1 style="font-size:18px;font-weight:300;color:var(--earth);letter-spacing:4px;">订单报告</h1>
+    <p style="font-size:12px;color:#A0927B;">{{ garment.order_no }}</p>
+  </div>
+
+  <!-- ═══ 验证状态栏 ═══ -->
+  <div class="verify-bar {% if garment.is_verified %}verified{% else %}unverified{% endif %}" id="verifyBar">
+    {% if garment.is_verified %}
+    <!-- ✅ 已确认 -->
+    <div class="verify-title">&#10003; 客户已确认</div>
+    <div class="verify-stamp">
+      <div class="stamp-img">已<br>确认</div>
+      <div class="stamp-info">
+        <div>该收衣报告已经客户短信验证确认，<strong style="color:#4A7C59;">具有法律效力</strong></div>
+        <div style="color:#8B7355;margin-top:2px;">确认时间：{{ garment.verified_time[:19] }}</div>
+        <div style="color:#8B7355;">确认手机：{{ garment.phone_masked }}</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+      <button class="btn-send-link" id="btnSendLink" onclick="sendReportLink()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+        短信发送报告链接
+      </button>
+      <span id="sendLinkMsg" style="font-size:11px;color:#8B7355;min-height:16px;"></span>
+    </div>
+    {% else %}
+    <!-- ⚠️ 待确认 -->
+    <div class="verify-title">&#9888; 待客户短信确认</div>
+    <div class="verify-subtitle">
+      验证码已发送至 <strong>{{ garment.phone_masked }}</strong>，30分钟内有效。<br>
+      客户输入验证码确认后，收衣报告即<strong>具有法律效力</strong>。
+    </div>
+
+    <div class="code-input-group">
+      <input type="text" id="verifyCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+             placeholder="6位验证码" oninput="onCodeInput()">
+      <button class="btn-verify" id="btnVerify" onclick="doVerify()">确认验证</button>
+    </div>
+
+    <button class="btn-resend" id="btnResend" onclick="resendCode()">未收到短信？重新发送</button>
+    <div id="verifyMsg" style="font-size:11px;margin-top:6px;min-height:16px;"></div>
+    {% endif %}
+  </div>
+
+  <!-- ═══ 报告内容 ═══ -->
+  <div class="card">
+    <div class="report-tabs">
+      <div class="report-tab active" onclick="switchTab('intake')" id="tabIntake">收衣报告</div>
+      <div class="report-tab" onclick="switchTab('delivery')" id="tabDelivery">交衣报告</div>
+    </div>
+    <iframe id="reportFrame" class="report-frame" src="/reports/{{ garment.intake_report_path }}"></iframe>
+  </div>
+
+  <div style="text-align:center;margin-top:16px;">
+    <a href="/dashboard" class="btn btn-outline">返回后台</a>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ORDER_NO = '{{ garment.order_no }}';
+const IS_VERIFIED = {{ 'true' if garment.is_verified else 'false' }};
+
+function toast(msg, duration=2000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ─── 验证码输入实时反馈 ───
+function onCodeInput() {
+  const input = document.getElementById('verifyCode');
+  const btn = document.getElementById('btnVerify');
+  const msg = document.getElementById('verifyMsg');
+  let raw = input.value.replace(/\D/g, '');
+  if (raw.length > 6) raw = raw.slice(0, 6);
+  input.value = raw;
+
+  input.className = '';
+  msg.textContent = '';
+
+  if (raw.length === 6) {
+    btn.disabled = false;
+  } else {
+    btn.disabled = true;
+    if (raw.length > 0) {
+      msg.textContent = `还差 ${6 - raw.length} 位数字`;
+      msg.style.color = '#A0927B';
+    }
+  }
+}
+
+// ─── 验证 ───
+async function doVerify() {
+  const input = document.getElementById('verifyCode');
+  const code = input.value;
+  const btn = document.getElementById('btnVerify');
+  const msg = document.getElementById('verifyMsg');
+
+  if (code.length !== 6) {
+    msg.textContent = '请输入6位验证码';
+    msg.style.color = '#C62828';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 验证中';
+
+  try {
+    const formData = new FormData();
+    formData.append('order_no', ORDER_NO);
+    formData.append('code', code);
+
+    const resp = await fetch('/api/intake/verify', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.success) {
+      if (data.already_verified) {
+        toast('该订单已确认过');
+        location.reload();
+        return;
+      }
+      // 验证成功
+      msg.textContent = '';
+      toast('✓ 验证通过，收衣报告已生效');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      input.className = 'error';
+      msg.textContent = data.error || '验证失败';
+      msg.style.color = '#C62828';
+      btn.textContent = '确认验证';
+      btn.disabled = false;
+    }
+  } catch (err) {
+    msg.textContent = '网络错误，请重试';
+    msg.style.color = '#C62828';
+    btn.textContent = '确认验证';
+    btn.disabled = false;
+  }
+}
+
+// ─── 重新发送验证码 ───
+async function resendCode() {
+  const btn = document.getElementById('btnResend');
+  btn.disabled = true;
+  btn.textContent = '正在发送...';
+
+  try {
+    const formData = new FormData();
+    formData.append('order_no', ORDER_NO);
+
+    const resp = await fetch('/api/intake/send-verification', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.success) {
+      toast('验证码已重新发送');
+      {% if config.DEBUG or true %}
+      // 开发模式：显示验证码方便测试
+      if (data.code) {
+        const msg = document.getElementById('verifyMsg');
+        msg.textContent = '[DEV] 验证码: ' + data.code;
+        msg.style.color = '#8B7355';
+      }
+      {% endif %}
+    } else {
+      toast(data.error || '发送失败');
+    }
+  } catch (err) {
+    toast('网络错误');
+  }
+
+  // 60秒后可重新发送
+  let countdown = 60;
+  btn.textContent = countdown + '秒后可重新发送';
+  const timer = setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      clearInterval(timer);
+      btn.textContent = '未收到短信？重新发送';
+      btn.disabled = false;
+    } else {
+      btn.textContent = countdown + '秒后可重新发送';
+    }
+  }, 1000);
+}
+
+// ─── 报告切换 ───
+function switchTab(type) {
+  document.getElementById('tabIntake').classList.toggle('active', type === 'intake');
+  document.getElementById('tabDelivery').classList.toggle('active', type === 'delivery');
+  const path = type === 'intake'
+    ? '/reports/{{ garment.intake_report_path }}'
+    : '/reports/{{ garment.delivery_report_path }}';
+  document.getElementById('reportFrame').src = path;
+}
+
+// ─── 发送报告链接短信 ───
+async function sendReportLink() {
+  const btn = document.getElementById('btnSendLink');
+  const msg = document.getElementById('sendLinkMsg');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 发送中';
+  msg.textContent = '';
+
+  try {
+    const formData = new FormData();
+    formData.append('order_no', ORDER_NO);
+
+    const resp = await fetch('/api/intake/send-report-link', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.success) {
+      btn.classList.add('sent');
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg>已发送';
+      msg.textContent = '报告链接已发送至 ' + data.phone_masked;
+      msg.style.color = '#4A7C59';
+
+      // 开发模式显示链接
+      if (data.report_url) {
+        msg.textContent += '  |  [DEV] 链接: ' + data.report_url;
+      }
+
+      // 5秒后恢复按钮
+      setTimeout(() => {
+        btn.classList.remove('sent');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>短信发送报告链接';
+        btn.disabled = false;
+      }, 5000);
+    } else {
+      btn.disabled = false;
+      msg.textContent = data.error || '发送失败，请重试';
+      msg.style.color = '#C62828';
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>短信发送报告链接';
+    }
+  } catch (err) {
+    btn.disabled = false;
+    msg.textContent = '网络错误，请重试';
+    msg.style.color = '#C62828';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>短信发送报告链接';
+  }
+}
+</script>
+</body>
+</html>

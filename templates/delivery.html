@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>交衣交付 · 极净奢护</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" style="text-decoration:none;color:var(--earth);font-size:14px;">&larr; 返回</a>
+  <div class="nav-brand">CLARITY</div>
+  <div style="width:40px"></div>
+</nav>
+
+<div class="container">
+  <div style="text-align:center;margin-bottom:24px;">
+    <h1 style="font-size:20px;font-weight:300;color:var(--sage);letter-spacing:4px;">交衣交付</h1>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">洗后检测 · 前后对比 · 交衣报告</p>
+  </div>
+
+  <!-- 进度条 -->
+  <div class="card">
+    <div class="steps" id="steps">
+      <div class="step active" id="step1"><div class="dot">1</div>查找订单</div>
+      <div class="step" id="step2"><div class="dot">2</div>拍照</div>
+      <div class="step" id="step3"><div class="dot">3</div>检测</div>
+      <div class="step" id="step4"><div class="dot">4</div>报告</div>
+    </div>
+  </div>
+
+  <!-- Step 1: 查找订单 -->
+  <div id="section-find" class="card">
+    <div class="card-title">查找待交付订单</div>
+    <div class="form-group">
+      <label class="form-label">搜索订单号或客户手机号</label>
+      <input type="text" class="form-input" id="searchQuery" placeholder="输入订单号（如 CL20260603001）或手机号">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="searchOrder()">查找订单</button>
+    <div id="searchResult" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- Step 2: 拍照 -->
+  <div id="section-photo" class="card" style="display:none;">
+    <div class="card-title">拍摄洗后照片</div>
+    <div id="orderSummary" style="margin-bottom:12px;font-size:13px;"></div>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📸</div>
+      <div class="hint">拍摄洗后照片<br><strong>建议与收衣时相同角度拍摄，便于对比</strong></div>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" multiple hidden>
+    </div>
+    <div class="photo-preview" id="photoPreview"></div>
+    <div style="display:flex;gap:12px;margin-top:16px;">
+      <button class="btn btn-outline" onclick="goBack()">重新搜索</button>
+      <button class="btn btn-success btn-lg" onclick="submitDelivery()" id="btnSubmit" disabled style="flex:1;">
+        提交洗后检测 &rarr;
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 3: 检测中 -->
+  <div id="section-detecting" class="card" style="display:none;text-align:center;">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>AI 正在分析洗后效果…</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">对比洗前洗后状态</div>
+    </div>
+  </div>
+
+  <!-- Step 4: 检测结果 -->
+  <div id="section-result" class="card" style="display:none;">
+    <div class="card-title">洗护前后对比</div>
+    <div id="comparisonContent"></div>
+    <div style="display:flex;gap:12px;margin-top:16px;">
+      <button class="btn btn-outline" onclick="resetDelivery()">处理下一个</button>
+      <a class="btn btn-success" id="btnViewReport" href="#" style="flex:1;text-align:center;">查看交衣报告 &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let currentOrder = null;
+let uploadedFiles = [];
+
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const photoPreview = document.getElementById('photoPreview');
+const btnSubmit = document.getElementById('btnSubmit');
+
+fileInput.addEventListener('change', handleFiles);
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  handleFiles({ target: { files: e.dataTransfer.files } });
+});
+
+function handleFiles(e) {
+  const files = Array.from(e.target.files);
+  files.forEach(f => {
+    if (!f.type.startsWith('image/')) return;
+    const formData = new FormData();
+    formData.append('file', f);
+    fetch('/api/upload', { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          uploadedFiles.push(...data.files);
+          renderPreviews();
+          btnSubmit.disabled = uploadedFiles.length === 0;
+        }
+      });
+  });
+}
+
+function renderPreviews() {
+  photoPreview.innerHTML = uploadedFiles.map((f, i) => `
+    <div class="photo-preview-item">
+      <img src="/uploads/${f}" alt="photo${i}">
+      <button class="remove" onclick="removePhoto(${i})">&times;</button>
+    </div>`).join('');
+  btnSubmit.disabled = uploadedFiles.length === 0;
+}
+
+function removePhoto(i) {
+  uploadedFiles.splice(i, 1);
+  renderPreviews();
+}
+
+function setStep(n) {
+  document.querySelectorAll('.step').forEach((s, i) => {
+    s.className = 'step' + (i+1 < n ? ' done' : '') + (i+1 === n ? ' active' : '');
+  });
+}
+
+async function searchOrder() {
+  const q = document.getElementById('searchQuery').value.trim();
+  if (!q) return toast('请输入订单号或手机号');
+
+  try {
+    const resp = await fetch(`/api/orders/${q}`);
+    if (!resp.ok) {
+      document.getElementById('searchResult').innerHTML =
+        '<div style="padding:12px;background:#FFF3E0;border-radius:8px;color:#E65100;font-size:13px;">未找到该订单，请检查输入</div>';
+      return;
+    }
+    const data = await resp.json();
+    if (data.status === 'delivered') {
+      document.getElementById('searchResult').innerHTML =
+        '<div style="padding:12px;background:#FFF3E0;border-radius:8px;color:#E65100;font-size:13px;">该订单已交付</div>';
+      return;
+    }
+    if (data.status === 'received') {
+      document.getElementById('searchResult').innerHTML =
+        '<div style="padding:12px;background:#FFF3E0;border-radius:8px;color:#E65100;font-size:13px;">该订单尚未开始清洗，请先将状态更新为清洗中</div>';
+      return;
+    }
+
+    currentOrder = data;
+    document.getElementById('orderSummary').innerHTML =
+      `<strong>${data.brand}</strong> ${data.category} | 客户: ${data.customer_name} | 估价: &yen;${data.estimated_value?.toLocaleString() || 0}`;
+
+    document.getElementById('section-find').style.display = 'none';
+    document.getElementById('section-photo').style.display = '';
+    setStep(2);
+  } catch (err) {
+    toast('查询失败，请重试');
+  }
+}
+
+function goBack() {
+  currentOrder = null;
+  uploadedFiles = [];
+  photoPreview.innerHTML = '';
+  btnSubmit.disabled = true;
+  document.getElementById('section-photo').style.display = 'none';
+  document.getElementById('section-find').style.display = '';
+  setStep(1);
+}
+
+async function submitDelivery() {
+  if (!currentOrder) return toast('请先查找订单');
+  if (uploadedFiles.length === 0) return toast('请上传洗后照片');
+
+  document.getElementById('section-photo').style.display = 'none';
+  document.getElementById('section-detecting').style.display = '';
+  setStep(3);
+
+  const formData = new FormData();
+  formData.append('order_no', currentOrder.order_no);
+  formData.append('photos', JSON.stringify(uploadedFiles));
+
+  try {
+    const resp = await fetch('/api/delivery', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (!data.success) return toast(data.error || '检测失败');
+
+    document.getElementById('section-detecting').style.display = 'none';
+    document.getElementById('section-result').style.display = '';
+    setStep(4);
+
+    const d = data.detection;
+    const resolved = d.defects_resolved || [];
+    const remaining = d.defects_remaining || [];
+
+    function buildDefectRows(defects, statusLabel, statusColor) {
+      if (!defects.length) return '';
+      return defects.map(def => `
+        <div style="display:flex;gap:8px;align-items:center;padding:8px 10px;margin-bottom:4px;background:#fff;border-radius:6px;font-size:12px;">
+          <span>${def.icon}</span>
+          <span style="flex:1;">${def.name} · ${def.position}</span>
+          <span style="color:${statusColor};font-weight:500;">${statusLabel}</span>
+          <span style="font-size:10px;color:var(--text-muted);">${def.note || ''}</span>
+        </div>`).join('');
+    }
+
+    let defectSection = '';
+    if (resolved.length > 0 || remaining.length > 0) {
+      defectSection = `
+        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+          <div class="card-title" style="font-size:13px;color:var(--sage);margin-bottom:10px;">
+            &#128269; 瑕疵处理结果 — 收衣时共${resolved.length + remaining.length}处
+          </div>
+          ${buildDefectRows(resolved, '已清除', '#4A7C59')}
+          ${buildDefectRows(remaining, remaining.some(d => d.severity === 'high') ? '结构性损伤' : '已改善', remaining.some(d => d.severity === 'high') ? '#C62828' : '#E65100')}
+          ${remaining.some(d => d.severity === 'high') ? '<div style="font-size:10px;color:#C62828;margin-top:6px;">&#9888; 严重瑕疵（破损/撕裂/变形）为结构性损伤，洗护不改变其状态，已收衣时告知</div>' : ''}
+        </div>`;
+    }
+
+    document.getElementById('comparisonContent').innerHTML = `
+      <div class="compare-container">
+        <div class="compare-box before">
+          <div class="label" style="color:#C4943A;">洗护前</div>
+          <div class="val" style="color:#C4943A;">${d.before_condition.label}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${d.before_condition.desc}</div>
+        </div>
+        <div class="compare-arrow">&rarr;</div>
+        <div class="compare-box after">
+          <div class="label" style="color:var(--sage);">洗护后</div>
+          <div class="val" style="color:var(--sage);">${d.after_condition.label}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${d.after_condition.desc}</div>
+        </div>
+      </div>
+
+      ${defectSection}
+
+      <div class="card-title" style="margin-top:20px;">品质评分</div>
+      <div class="scores">
+        <div class="score-item">
+          <div class="num">${d.brightness_improvement}%</div>
+          <div class="lbl">光泽度提升</div>
+          <div class="score-bar"><div class="score-fill" style="width:${d.brightness_improvement}%;"></div></div>
+        </div>
+        <div class="score-item">
+          <div class="num">${d.color_fidelity}%</div>
+          <div class="lbl">色彩保真度</div>
+          <div class="score-bar"><div class="score-fill" style="width:${d.color_fidelity}%;"></div></div>
+        </div>
+        <div class="score-item">
+          <div class="num">${d.fabric_integrity}%</div>
+          <div class="lbl">面料完整度</div>
+          <div class="score-bar"><div class="score-fill" style="width:${d.fabric_integrity}%;"></div></div>
+        </div>
+      </div>
+`;
+
+    document.getElementById('btnViewReport').href = data.report_url;
+  } catch (err) {
+    toast('网络错误，请重试');
+  }
+}
+
+function resetDelivery() {
+  currentOrder = null;
+  uploadedFiles = [];
+  photoPreview.innerHTML = '';
+  btnSubmit.disabled = true;
+  document.getElementById('searchQuery').value = '';
+  document.getElementById('searchResult').innerHTML = '';
+  document.getElementById('section-result').style.display = 'none';
+  document.getElementById('section-find').style.display = '';
+  setStep(1);
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

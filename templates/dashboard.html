@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>后台管理 · 极净奢护</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" style="text-decoration:none;color:var(--earth);font-size:14px;">&larr; 首页</a>
+  <div class="nav-brand">CLARITY</div>
+  <div style="width:40px"></div>
+</nav>
+
+<div class="container">
+  <div style="text-align:center;margin-bottom:20px;">
+    <h1 style="font-size:20px;font-weight:300;color:var(--earth);letter-spacing:4px;">后台管理</h1>
+  </div>
+
+  <!-- 统计卡片 -->
+  <div class="stat-cards" id="statCards">
+    <div class="stat-card"><div class="num" id="cntReceived">-</div><div class="lbl">已收衣</div></div>
+    <div class="stat-card"><div class="num" id="cntCleaning">-</div><div class="lbl">清洗中</div></div>
+    <div class="stat-card"><div class="num" id="cntReady">-</div><div class="lbl">待交付</div></div>
+    <div class="stat-card sage"><div class="num" id="cntDelivered">-</div><div class="lbl">已交付</div></div>
+  </div>
+
+  <!-- 筛选 Tab -->
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;" id="filterTabs">
+    <button class="btn btn-outline active" onclick="filterOrders('')" id="filterAll">全部</button>
+    <button class="btn btn-outline" onclick="filterOrders('received')">已收衣</button>
+    <button class="btn btn-outline" onclick="filterOrders('cleaning')">清洗中</button>
+    <button class="btn btn-outline" onclick="filterOrders('ready')">待交付</button>
+    <button class="btn btn-outline" onclick="filterOrders('delivered')">已交付</button>
+  </div>
+
+  <!-- 搜索 -->
+  <div style="margin-bottom:16px;">
+    <input type="text" class="form-input" id="searchBox" placeholder="搜索客户姓名/手机号/订单号…" oninput="filterTable()">
+  </div>
+
+  <!-- 订单列表 -->
+  <div class="card" style="padding:0;overflow-x:auto;">
+    <table class="order-table">
+      <thead>
+        <tr>
+          <th>订单号</th>
+          <th>客户</th>
+          <th>品牌</th>
+          <th>品类</th>
+          <th>估价</th>
+          <th>状态</th>
+          <th>确认</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="orderTableBody">
+        <tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);">加载中…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let allOrders = [];
+let currentFilter = '';
+
+async function loadOrders(status = '') {
+  try {
+    const url = status ? `/api/orders?status=${status}` : '/api/orders';
+    const resp = await fetch(url);
+    const data = await resp.json();
+    allOrders = data.orders;
+    renderStats(data.counts);
+    renderTable(allOrders);
+  } catch (err) {
+    document.getElementById('orderTableBody').innerHTML =
+      '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--danger);">加载失败</td></tr>';
+  }
+}
+
+function renderStats(counts) {
+  document.getElementById('cntReceived').textContent = counts.received || 0;
+  document.getElementById('cntCleaning').textContent = counts.cleaning || 0;
+  document.getElementById('cntReady').textContent = counts.ready || 0;
+  document.getElementById('cntDelivered').textContent = counts.delivered || 0;
+}
+
+function renderTable(orders) {
+  if (orders.length === 0) {
+    document.getElementById('orderTableBody').innerHTML =
+      '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">暂无数据</td></tr>';
+    return;
+  }
+
+  const statusMap = {
+    'received': '<span class="badge badge-received">已收衣</span>',
+    'cleaning': '<span class="badge badge-cleaning">清洗中</span>',
+    'ready': '<span class="badge badge-ready">待交付</span>',
+    'delivered': '<span class="badge badge-delivered">已交付</span>',
+  };
+
+  function statusActionHTML(o) {
+    const map = {
+      'received': `<button class="btn btn-outline" style="font-size:11px;padding:4px 10px;" onclick="updateStatus('${o.order_no}','cleaning')">开始清洗</button>`,
+      'cleaning': `<button class="btn btn-outline" style="font-size:11px;padding:4px 10px;" onclick="updateStatus('${o.order_no}','ready')">清洗完成</button>`,
+      'ready': `<button class="btn btn-success" style="font-size:11px;padding:4px 10px;" onclick="updateStatus('${o.order_no}','delivered')">确认交付</button>`,
+      'delivered': '-',
+    };
+    return map[o.status] || '-';
+  }
+
+  document.getElementById('orderTableBody').innerHTML = orders.map(o => `
+    <tr>
+      <td><a href="/report/${o.order_no}" class="link">${o.order_no}</a></td>
+      <td>${o.customer_name || '-'}</td>
+      <td>${o.brand || '-'}</td>
+      <td>${o.category || '-'}</td>
+      <td>${o.estimated_value ? '&yen;' + o.estimated_value.toLocaleString() : '-'}</td>
+      <td>${statusMap[o.status] || o.status}</td>
+      <td>${o.verified_at ? '<span style="color:#4A7C59;font-size:11px;">&#10003; 已确认</span>' : (o.verification_code ? '<span style="color:#C4943A;font-size:11px;">&#9888; 待确认</span>' : '<span style="color:#A0927B;font-size:11px;">-</span>')}</td>
+      <td>${statusActionHTML(o)}</td>
+    </tr>
+  `).join('');
+}
+
+function filterOrders(status) {
+  currentFilter = status;
+  document.querySelectorAll('#filterTabs button').forEach(b => {
+    b.classList.toggle('active', b.textContent === (status === '' ? '全部' :
+      status === 'received' ? '已收衣' : status === 'cleaning' ? '清洗中' :
+      status === 'ready' ? '待交付' : '已交付'));
+  });
+  loadOrders(status);
+}
+
+function filterTable() {
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  const filtered = allOrders.filter(o =>
+    (o.order_no || '').toLowerCase().includes(q) ||
+    (o.customer_name || '').toLowerCase().includes(q) ||
+    (o.customer_phone || '').includes(q) ||
+    (o.brand || '').toLowerCase().includes(q)
+  );
+  renderTable(filtered);
+}
+
+async function updateStatus(orderNo, newStatus) {
+  try {
+    const resp = await fetch(`/api/orders/${orderNo}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      toast('状态已更新');
+      loadOrders(currentFilter);
+    }
+  } catch (err) {
+    toast('更新失败');
+  }
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// 初始化
+loadOrders();
+</script>
+</body>
+</html>

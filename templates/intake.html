@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>收衣录入 · 极净奢护</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  .defect-section { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .defect-section-title {
+    font-size: 14px; font-weight: 500; color: #C44; letter-spacing: 1px;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .defect-count { font-size: 22px; font-weight: 300; }
+  .defect-card {
+    display: flex; gap: 14px; background: #FFFAF5; border: 1px solid #F0D8C0;
+    border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
+    align-items: flex-start;
+  }
+  .defect-card.severe { background: #FFF5F5; border-color: #F5C0C0; }
+  .defect-thumb {
+    width: 80px; height: 80px; border-radius: 6px; overflow: hidden;
+    position: relative; flex-shrink: 0; background: #f0e8db;
+    border: 1px solid #e0d5c5;
+  }
+  .defect-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .defect-thumb .marker {
+    position: absolute; border: 2px solid #E44; border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(228,68,68,0.25);
+    animation: pulse-marker 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-marker {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(228,68,68,0.25); }
+    50% { box-shadow: 0 0 0 6px rgba(228,68,68,0.08); }
+  }
+  .defect-info { flex: 1; min-width: 0; }
+  .defect-info .name { font-size: 14px; font-weight: 500; color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .defect-info .desc { font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+  .defect-info .risk {
+    font-size: 11px; color: #C44; margin-top: 6px; padding: 6px 8px;
+    background: #FFF0F0; border-radius: 4px; border-left: 2px solid #E88;
+  }
+  .sev-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; letter-spacing: 0.5px;
+  }
+  .sev-low { background: #FFF8E1; color: #F57F17; }
+  .sev-medium { background: #FFF0E0; color: #E65100; }
+  .sev-high { background: #FFE0E0; color: #C62828; }
+  .no-defect { text-align: center; padding: 16px; color: var(--sage); font-size: 13px; }
+  .defect-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .defect-btn {
+    padding: 6px 14px; border-radius: 4px; font-size: 12px; cursor: pointer;
+    border: 1px solid; transition: all 0.2s; font-weight: 500; letter-spacing: 0.5px;
+  }
+  .defect-btn.confirm {
+    background: #F2FAF4; color: #4A7C59; border-color: #7BAF8A;
+  }
+  .defect-btn.confirm:hover { background: #4A7C59; color: #fff; }
+  .defect-btn.confirm.active { background: #4A7C59; color: #fff; pointer-events: none; }
+  .defect-btn.delete {
+    background: #FFF5F5; color: #C62828; border-color: #E8A0A0;
+  }
+  .defect-btn.delete:hover { background: #C62828; color: #fff; }
+  .defect-card.confirmed { border-left: 4px solid #4A7C59; background: #F6FAF7; }
+  .defect-card.confirmed .defect-thumb { border-color: #7BAF8A; }
+  .defect-card.deleted {
+    opacity: 0.35; transform: scale(0.98); transition: all 0.35s ease;
+    pointer-events: none;
+  }
+  .delete-badge {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(198,40,40,0.12); display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+  .confirm-badge {
+    display: inline-block; background: #4A7C59; color: #fff; padding: 1px 8px;
+    border-radius: 3px; font-size: 10px; font-weight: 500; margin-left: 6px;
+  }
+  .phone-hint { font-size: 11px; margin-top: 4px; min-height: 16px; transition: color 0.2s; }
+  .phone-hint.error { color: #C62828; }
+  .phone-hint.valid { color: #4A7C59; }
+  .form-input.input-error { border-color: #E88; background: #FFF5F5; }
+  .form-input.input-valid { border-color: #7BAF8A; background: #F6FAF7; }
+  .photo-annotated {
+    position: relative; border-radius: var(--radius); overflow: hidden;
+    margin-bottom: 12px; background: #f0e8db;
+  }
+  .photo-annotated img { width: 100%; display: block; }
+  .photo-annotated .anno-dot {
+    position: absolute; width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid #E44; background: rgba(228,68,68,0.2);
+    box-shadow: 0 0 0 4px rgba(228,68,68,0.12);
+    transform: translate(-50%, -50%); cursor: pointer;
+    animation: pulse-marker 1.5s ease-in-out infinite;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: #fff; font-weight: 600;
+  }
+
+  /* ─── 语音录入 ─── */
+  .voice-group { display: flex; gap: 8px; align-items: stretch; }
+  .voice-group textarea.form-input { flex: 1; resize: vertical; min-height: 42px; }
+  .btn-voice {
+    width: 44px; min-width: 44px; border: 1.5px solid #D8D0C0; border-radius: var(--radius);
+    background: #fff; color: #8B7355; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; font-size: 20px;
+    transition: all 0.25s; position: relative; flex-shrink: 0;
+  }
+  .btn-voice:hover { border-color: #B8A080; color: #6B5D4A; background: #FAF8F5; }
+  .btn-voice.recording {
+    background: #FFF0F0; border-color: #E88; color: #C62828;
+    animation: voice-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes voice-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(198,40,40,0.25); }
+    50% { box-shadow: 0 0 0 10px rgba(198,40,40,0); }
+  }
+  .btn-voice.recording::after {
+    content: ''; position: absolute; top: -4px; right: -4px; width: 10px; height: 10px;
+    background: #C62828; border-radius: 50%; animation: voice-blink 0.8s step-end infinite;
+  }
+  @keyframes voice-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+  .btn-voice:disabled { opacity: 0.4; cursor: not-allowed; border-color: #E8E0D8; }
+  .voice-hint { font-size: 10px; color: var(--text-muted); margin-top: 4px; transition: color 0.3s; }
+  .voice-hint.recording { color: #C62828; }
+
+  /* ─── 报告按钮禁用态 ─── */
+  .btn-success:disabled {
+    background: #D8D0C0; border-color: #C8BFA8; color: #A09888;
+    cursor: not-allowed; opacity: 0.6; box-shadow: none;
+  }
+  .btn-primary:disabled {
+    background: #D8D0C0; border-color: #C8BFA8; color: #A09888;
+    cursor: not-allowed; opacity: 0.6; box-shadow: none;
+  }
+
+  /* ─── 视频录制 ─── */
+  .video-zone {
+    border: 2px dashed #C8B8A0; border-radius: var(--radius); padding: 20px;
+    text-align: center; cursor: pointer; transition: all 0.2s;
+    background: #FAF8F5; margin-top: 12px;
+  }
+  .video-zone:hover { border-color: #8B7355; background: #F5F1E8; }
+  .video-zone .icon { font-size: 28px; margin-bottom: 6px; }
+  .video-zone .hint { font-size: 12px; color: var(--text-muted); }
+  .video-zone .hint strong { color: var(--earth); }
+  .video-zone input[type="file"] { display: none; }
+  .video-preview { margin-top: 8px; }
+  .video-preview video { width: 100%; max-height: 240px; border-radius: 8px; background: #000; }
+  .video-preview .remove {
+    position: absolute; top: 4px; right: 4px; width: 24px; height: 24px;
+    background: rgba(0,0,0,0.55); color: #fff; border: none; border-radius: 50%;
+    font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .video-preview-item { position: relative; display: inline-block; width: 100%; max-width: 400px; }
+
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" style="text-decoration:none;color:var(--earth);font-size:14px;">&larr; 返回</a>
+  <div class="nav-brand">CLARITY</div>
+  <div style="width:40px"></div>
+</nav>
+
+<div class="container">
+  <div style="text-align:center;margin-bottom:24px;">
+    <h1 style="font-size:20px;font-weight:300;color:var(--earth);letter-spacing:4px;">收衣录入</h1>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">信息 · 拍照 · 识别 · 估价 · 瑕疵证据 · 报告</p>
+  </div>
+
+  <div class="card">
+    <div class="steps" id="steps">
+      <div class="step active" id="step1"><div class="dot">1</div>信息</div>
+      <div class="step" id="step2"><div class="dot">2</div>拍照</div>
+      <div class="step" id="step3"><div class="dot">3</div>检测</div>
+      <div class="step" id="step4"><div class="dot">4</div>报告</div>
+    </div>
+  </div>
+
+  <!-- 第一步：客户信息 -->
+  <div id="section-info" class="card">
+    <div class="card-title">客户信息</div>
+    <div class="form-group">
+      <label class="form-label">手机号码（必填）</label>
+      <input type="tel" class="form-input" id="customerPhone" placeholder="请输入11位手机号码" maxlength="11" autocomplete="tel" inputmode="numeric" oninput="validatePhone()">
+      <div class="phone-hint" id="phoneHint"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">客户姓名（选填）</label>
+      <input type="text" class="form-input" id="customerName" placeholder="请输入客户姓名">
+    </div>
+    <div class="form-group">
+      <label class="form-label">客户地址（选填）</label>
+      <input type="text" class="form-input" id="customerAddress" placeholder="请输入客户地址">
+    </div>
+    <div class="form-group">
+      <label class="form-label">衣物品类（必选 · 提升AI检测准确率）</label>
+      <select class="form-input" id="garmentType" style="appearance:auto;cursor:pointer;">
+        <option value="">请选择衣物品类</option>
+        <option value="上衣">上衣</option>
+        <option value="裤子">裤子</option>
+        <option value="裙子">裙子</option>
+        <option value="外套">外套</option>
+        <option value="连衣裙">连衣裙</option>
+        <option value="西装">西装</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">备注（选填 · 支持语音录入）</label>
+      <div class="voice-group">
+        <textarea class="form-input" id="notes" placeholder="如：客户口头说明的已知瑕疵等" rows="2"></textarea>
+        <button class="btn-voice" id="btnVoice" onclick="toggleVoice()" title="语音录入">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+      </div>
+      <div class="voice-hint" id="voiceHint"></div>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <button class="btn btn-primary" id="btnNextInfo" onclick="goToUpload()" style="flex:1;" disabled>请先输入正确手机号</button>
+    </div>
+  </div>
+
+  <!-- 第二步：上传照片 -->
+  <div id="section-upload" class="card" style="display:none;">
+    <div class="card-title">拍摄 / 上传衣物照片</div>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">&#128248;</div>
+      <div class="hint">点击拍照或选择照片<br><strong>支持多张，建议拍摄商标、面料、整体、局部细节</strong></div>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" multiple hidden>
+    </div>
+    <div class="photo-preview" id="photoPreview"></div>
+
+    <!-- 视频录制（可选） -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;letter-spacing:1px;">辅助视频（选填）</div>
+      <div class="video-zone" id="videoZone" onclick="document.getElementById('videoInput').click()">
+        <div class="icon">🎥</div>
+        <div class="hint">点击录制视频<br><strong>用于完整记录衣物全貌，辅助AI检测</strong></div>
+        <input type="file" id="videoInput" accept="video/*" capture="environment" hidden>
+      </div>
+      <div class="video-preview" id="videoPreview" style="display:none;"></div>
+    </div>
+
+    <div style="display:flex;gap:12px;">
+      <button class="btn btn-outline" onclick="goToInfo()">上一步：客户信息</button>
+      <button class="btn btn-primary btn-block btn-lg" onclick="submitIntake()" id="btnSubmit" disabled>
+        提交检测 &rarr;
+      </button>
+    </div>
+  </div>
+
+  <!-- 第三步：AI检测中 -->
+  <div id="section-detecting" class="card" style="display:none;text-align:center;">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>AI 正在分析识别中…</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">检测品牌、面料、品类、成色、瑕疵</div>
+    </div>
+  </div>
+
+  <!-- 第四步：检测结果 + 报告 -->
+  <div id="section-result" class="card" style="display:none;">
+    <div class="card-title">AI 智能检测结果</div>
+    <div id="detectionContent"></div>
+    <div id="defectEvidence"></div>
+    <div style="display:flex;gap:12px;margin-top:20px;">
+      <button class="btn btn-outline" onclick="resetIntake()">重新录入</button>
+      <button class="btn btn-primary" id="btnRegenReport" onclick="regenReport()" style="display:none;flex:1;">根据已确认瑕疵重新生成收衣报告</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let uploadedFiles = [];
+
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const photoPreview = document.getElementById('photoPreview');
+const btnSubmit = document.getElementById('btnSubmit');
+
+fileInput.addEventListener('change', handleFiles);
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  handleFiles({ target: { files: e.dataTransfer.files } });
+});
+
+function handleFiles(e) {
+  const files = Array.from(e.target.files);
+  files.forEach(f => {
+    if (!f.type.startsWith('image/')) return;
+    const formData = new FormData();
+    formData.append('file', f);
+    fetch('/api/upload', { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          uploadedFiles.push(...data.files);
+          renderPreviews();
+          updateSubmitBtn();
+        }
+      });
+  });
+}
+
+function renderPreviews() {
+  photoPreview.innerHTML = uploadedFiles.map((f, i) => `
+    <div class="photo-preview-item">
+      <img src="/uploads/${f}">
+      <button class="remove" onclick="removePhoto(${i})">&times;</button>
+    </div>`).join('');
+  updateSubmitBtn();
+}
+
+function removePhoto(i) { uploadedFiles.splice(i, 1); renderPreviews(); }
+
+// ─── 视频录制 ─────────────────────────────────────────────
+let videoFile = null;
+
+document.getElementById('videoInput').addEventListener('change', handleVideo);
+function handleVideo(e) {
+  const file = e.target.files[0];
+  if (!file || !file.type.startsWith('video/')) return;
+  videoFile = file;
+  renderVideoPreview();
+}
+
+function renderVideoPreview() {
+  const container = document.getElementById('videoPreview');
+  if (!videoFile) { container.style.display = 'none'; container.innerHTML = ''; return; }
+  const url = URL.createObjectURL(videoFile);
+  container.style.display = '';
+  container.innerHTML = `
+    <div class="video-preview-item">
+      <video src="${url}" controls playsinline></video>
+      <button class="remove" onclick="removeVideo()">&times;</button>
+    </div>`;
+}
+
+function removeVideo() {
+  videoFile = null;
+  document.getElementById('videoInput').value = '';
+  renderVideoPreview();
+}
+
+function updateSubmitBtn() {
+  btnSubmit.disabled = uploadedFiles.length === 0 && !videoFile;
+}
+
+function setStep(n) {
+  document.querySelectorAll('.step').forEach((s, i) => {
+    s.className = 'step' + (i+1 < n ? ' done' : '') + (i+1 === n ? ' active' : '');
+  });
+}
+
+function goToUpload() {
+  // 验证手机号（姓名选填）
+  const phone = document.getElementById('customerPhone').value.trim();
+  if (!phone) return toast('请先输入手机号码');
+  if (!/^1[3-9]\d{9}$/.test(phone)) return toast('手机号码格式不正确');
+  const gtype = document.getElementById('garmentType').value;
+  if (!gtype) return toast('请选择衣物品类');
+
+  document.getElementById('section-info').style.display = 'none';
+  document.getElementById('section-upload').style.display = '';
+  setStep(2);
+}
+
+function goToInfo() {
+  document.getElementById('section-upload').style.display = 'none';
+  document.getElementById('section-info').style.display = '';
+  setStep(1);
+}
+
+function sevTag(severity) {
+  const map = { low: 'sev-low', medium: 'sev-medium', high: 'sev-high' };
+  const labels = { low: '轻微', medium: '中等', high: '严重' };
+  return `<span class="sev-tag ${map[severity] || 'sev-low'}">${labels[severity] || severity}</span>`;
+}
+
+// ─── 瑕疵确认/删除状态管理 ────────────────────────────
+let defectsState = {};  // { defectId: 'pending' | 'confirmed' | 'deleted' }
+let rawDefects = [];    // 原始AI检测结果
+
+function buildDefectHTML(defects, photos) {
+  if (!defects || defects.length === 0) {
+    return `<div class="defect-section">
+      <div class="defect-section-title"><span class="defect-count">&#10003;</span> 瑕疵检测</div>
+      <div class="no-defect">未检测到明显瑕疵，衣物状态良好</div>
+    </div>`;
+  }
+
+  // 初始化状态
+  defects.forEach(d => {
+    if (!(d.id in defectsState)) defectsState[d.id] = 'pending';
+  });
+
+  const sevOrder = { high: 0, medium: 1, low: 2 };
+  const sorted = [...defects].sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
+
+  const activeDefects = sorted.filter(d => defectsState[d.id] !== 'deleted');
+  const confirmedCount = activeDefects.filter(d => defectsState[d.id] === 'confirmed').length;
+  const pendingCount = activeDefects.filter(d => defectsState[d.id] === 'pending').length;
+  const highActive = activeDefects.filter(d => d.severity === 'high').length;
+  const mediumActive = activeDefects.filter(d => d.severity === 'medium').length;
+
+  let warningBanner = '';
+  if (pendingCount > 0) {
+    warningBanner = `<div style="background:#FFF8E1;border:1px solid #F5D97E;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:#C4943A;">
+      &#9888; 还有 <strong>${pendingCount}</strong> 处瑕疵待确认，请逐条核实后点击 ✓确认 或 ✗删除
+    </div>`;
+  } else if (highActive > 0) {
+    warningBanner = `<div style="background:#FFF0F0;border:1px solid #F5C0C0;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:#C62828;">
+      &#9888; 已确认 <strong>${highActive}</strong> 处严重瑕疵、<strong>${mediumActive}</strong> 处中等瑕疵，已拍照存证
+    </div>`;
+  }
+
+  const cards = sorted.map((d, i) => {
+    const state = defectsState[d.id] || 'pending';
+    const isConfirmed = state === 'confirmed';
+    const isDeleted = state === 'deleted';
+    const photoSrc = photos[d.photo_index] ? `/uploads/${photos[d.photo_index]}` : '';
+    const a = d.annotation;
+    const markerStyle = `left:${a.x}%;top:${a.y}%;width:${a.width}px;height:${a.height}px;`;
+
+    return `<div class="defect-card ${d.severity === 'high' ? 'severe' : ''} ${isConfirmed ? 'confirmed' : ''} ${isDeleted ? 'deleted' : ''}" id="defect-${d.id}">
+      <div class="defect-thumb">
+        ${photoSrc ? `<img src="${photoSrc}" alt="瑕疵${i+1}"><div class="marker" style="${markerStyle}"></div>` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:24px;">${d.icon}</div>`}
+        ${isDeleted ? '<div class="delete-badge">&#10005;</div>' : ''}
+      </div>
+      <div class="defect-info">
+        <div class="name">${d.icon} ${d.name} ${sevTag(d.severity)} <span style="font-size:10px;color:var(--text-muted);">#${d.id}</span>${isConfirmed ? '<span class="confirm-badge">已确认</span>' : ''}</div>
+        <div class="desc">${d.description}</div>
+        <div class="risk">&#9888; ${d.risk}</div>
+        ${isDeleted ? '' : `<div class="defect-actions">
+          <button class="defect-btn confirm${isConfirmed ? ' active' : ''}" onclick="confirmDefect('${d.id}')" ${isConfirmed ? 'disabled' : ''}>
+            ${isConfirmed ? '&#10003; 已确认' : '&#10003; 确认'}
+          </button>
+          <button class="defect-btn delete" onclick="deleteDefect('${d.id}')" ${isConfirmed ? 'disabled' : ''}>
+            &#10005; 删除
+          </button>
+        </div>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="defect-section" id="defectSection">
+    <div class="defect-section-title">
+      <span class="defect-count" style="color:${pendingCount > 0 ? '#C4943A' : '#4A7C59'};">${activeDefects.length}</span>
+      处瑕疵${pendingCount > 0 ? `（${confirmedCount} 已确认 / ${pendingCount} 待确认）` : '已确认存证'}
+    </div>
+    ${warningBanner}
+    ${cards}
+    <div style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;padding:8px;background:${pendingCount > 0 ? '#FFF8E1' : '#F2FAF4'};border-radius:6px;">
+      ${pendingCount > 0 ? '&#128269; 请逐条核实AI检测结果，确认无误后点击 ✓确认，误识别点击 ✗删除' : '&#128274; 全部瑕疵已确认存证，洗护前后如有争议可随时调取对比'}
+    </div>
+  </div>`;
+}
+
+function confirmDefect(id) {
+  defectsState[id] = 'confirmed';
+  refreshDefectEvidence();
+}
+
+function deleteDefect(id) {
+  defectsState[id] = 'deleted';
+  refreshDefectEvidence();
+}
+
+function refreshDefectEvidence() {
+  if (rawDefects.length === 0) return;
+
+  document.getElementById('defectEvidence').innerHTML = buildDefectHTML(rawDefects, uploadedFiles);
+
+  const pendingCount = rawDefects.filter(d => defectsState[d.id] === 'pending').length;
+  const confirmedCount = rawDefects.filter(d => defectsState[d.id] === 'confirmed').length;
+  const resolvedCount = confirmedCount + rawDefects.filter(d => defectsState[d.id] === 'deleted').length;
+
+  const btnRegen = document.getElementById('btnRegenReport');
+  if (btnRegen) {
+    btnRegen.style.display = pendingCount === 0 ? '' : 'none';
+  }
+}
+
+function validatePhone() {
+  const input = document.getElementById('customerPhone');
+  const hint = document.getElementById('phoneHint');
+  const btn = document.getElementById('btnNextInfo');
+  if (btn) { btn.disabled = true; btn.textContent = '请先输入正确手机号'; }
+  let raw = input.value.replace(/\s/g, '');
+
+  const cleaned = raw.replace(/\D/g, '');
+  if (cleaned !== raw) {
+    input.value = cleaned;
+    raw = cleaned;
+  }
+
+  if (raw.length > 11) {
+    input.value = raw.slice(0, 11);
+    raw = input.value;
+  }
+
+  if (!raw) {
+    hint.textContent = '';
+    hint.className = 'phone-hint';
+    input.className = 'form-input';
+    return;
+  }
+
+  if (raw[0] !== '1') {
+    hint.textContent = '手机号码必须以 1 开头';
+    hint.className = 'phone-hint error';
+    input.className = 'form-input input-error';
+    return;
+  }
+
+  if (raw.length >= 2 && !/^1[3-9]/.test(raw)) {
+    hint.textContent = '第二位必须是 3~9 之间的数字';
+    hint.className = 'phone-hint error';
+    input.className = 'form-input input-error';
+    return;
+  }
+
+  if (raw.length < 11) {
+    hint.textContent = `还差 ${11 - raw.length} 位数字`;
+    hint.className = 'phone-hint';
+    input.className = 'form-input';
+    return;
+  }
+
+  if (/^1[3-9]\d{9}$/.test(raw)) {
+    hint.textContent = '\u2713 手机号码格式正确';
+    hint.className = 'phone-hint valid';
+    input.className = 'form-input input-valid';
+    if (btn) { btn.disabled = false; btn.textContent = '下一步：上传照片 \u2192'; }
+  } else {
+    hint.textContent = '请输入有效的11位手机号码';
+    hint.className = 'phone-hint error';
+    input.className = 'form-input input-error';
+  }
+}
+
+async function submitIntake() {
+  const name = document.getElementById('customerName').value.trim();
+  const phone = document.getElementById('customerPhone').value.trim();
+  if (!phone) return toast('请输入手机号码');
+  if (!/^1[3-9]\d{9}$/.test(phone)) return toast('手机号码格式不正确，请输入有效的11位手机号');
+  if (uploadedFiles.length === 0 && !videoFile) return toast('请先上传至少一张衣物照片或录制一段视频');
+  if (videoFile && videoFile.size > 200 * 1024 * 1024) return toast('视频文件不能超过200MB');
+
+  document.getElementById('section-upload').style.display = 'none';
+  document.getElementById('section-detecting').style.display = '';
+  setStep(3);
+
+  const formData = new FormData();
+  formData.append('customer_name', name);
+  formData.append('customer_phone', phone);
+  formData.append('customer_address', document.getElementById('customerAddress').value.trim());
+  formData.append('garment_type', document.getElementById('garmentType').value);
+  formData.append('notes', document.getElementById('notes').value);
+  formData.append('photos', JSON.stringify(uploadedFiles));
+  if (videoFile) formData.append('video', videoFile, videoFile.name);
+
+  try {
+    const resp = await fetch('/api/intake', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (!data.success) return toast(data.error || '检测失败');
+
+    document.getElementById('section-detecting').style.display = 'none';
+    document.getElementById('section-result').style.display = '';
+    setStep(4);
+
+    const d = data.detection;
+    const defects = d.defects || [];
+    rawDefects = defects;
+    defectsState = {};
+
+    document.getElementById('detectionContent').innerHTML = `
+      <div class="detection-grid">
+        <div class="detection-item"><div class="label">品牌</div><div class="value">${d.brand.name} <span style="font-size:11px;color:var(--text-muted)">${Math.round(d.brand.confidence*100)}%</span></div></div>
+        <div class="detection-item"><div class="label">品牌层级</div><div class="value"><span class="badge" style="background:#FFF3E0;color:#E65100;">${d.brand_tier || '-'}</span></div></div>
+        <div class="detection-item"><div class="label">面料材质</div><div class="value">${d.material.name} <span style="font-size:11px;color:var(--text-muted)">${Math.round(d.material.confidence*100)}%</span></div></div>
+        <div class="detection-item"><div class="label">品类</div><div class="value">${d.category.name} <span style="font-size:11px;color:var(--text-muted)">${Math.round(d.category.confidence*100)}%</span></div></div>
+        <div class="detection-item"><div class="label">颜色</div><div class="value">${d.color.name}</div></div>
+        <div class="detection-item"><div class="label">整体成色</div><div class="value">${d.condition.label}</div></div>
+      </div>
+      <div class="detection-value">
+        <div class="price">&yen; ${d.estimated_value.toLocaleString()}</div>
+        <div class="note">市场估价（品牌·材质·品类·成色·瑕疵综合评估）</div>
+      </div>`;
+
+    document.getElementById('defectEvidence').innerHTML = buildDefectHTML(defects, uploadedFiles);
+
+    // 无瑕疵直接跳转报告，有瑕疵需全部确认后再生成
+    if (defects.length === 0) {
+      window.location.href = data.report_url;
+      return;
+    }
+  } catch (err) {
+    toast('网络错误，请重试');
+    console.error(err);
+  }
+}
+
+async function regenReport() {
+  const confirmedIds = rawDefects.filter(d => defectsState[d.id] === 'confirmed').map(d => d.id);
+  const deletedIds = rawDefects.filter(d => defectsState[d.id] === 'deleted').map(d => d.id);
+  const pendingCount = rawDefects.filter(d => defectsState[d.id] === 'pending').length;
+  if (pendingCount > 0) return toast(`还有 ${pendingCount} 处瑕疵未确认，请先全部核实`);
+
+  const formData = new FormData();
+  formData.append('confirmed_defects', JSON.stringify(confirmedIds));
+  formData.append('deleted_defects', JSON.stringify(deletedIds));
+
+  try {
+    const resp = await fetch('/api/intake/confirm-defects', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!data.success) return toast(data.error || '操作失败');
+    window.location.href = data.report_url;
+  } catch (err) {
+    toast('网络错误');
+  }
+}
+
+function resetIntake() {
+  uploadedFiles = [];
+  rawDefects = [];
+  defectsState = {};
+  photoPreview.innerHTML = '';
+  document.getElementById('customerName').value = '';
+  document.getElementById('customerPhone').value = '';
+  document.getElementById('customerAddress').value = '';
+  document.getElementById('garmentType').value = '';
+  document.getElementById('notes').value = '';
+  document.getElementById('section-result').style.display = 'none';
+  document.getElementById('section-info').style.display = '';
+  // 清理视频
+  videoFile = null;
+  document.getElementById('videoInput').value = '';
+  document.getElementById('videoPreview').style.display = 'none';
+  document.getElementById('videoPreview').innerHTML = '';
+  btnSubmit.disabled = true;
+  setStep(1);
+}
+
+// ─── 语音录入 ────────────────────────────────────────────
+let voiceRecognition = null;
+let voiceRecording = false;
+
+function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    document.getElementById('btnVoice').disabled = true;
+    document.getElementById('btnVoice').title = '当前浏览器不支持语音录入';
+    document.getElementById('voiceHint').textContent = '当前浏览器不支持语音录入，请使用 Chrome 或 Edge';
+    return;
+  }
+
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.lang = 'zh-CN';
+  voiceRecognition.interimResults = true;
+  voiceRecognition.continuous = true;
+  voiceRecognition.maxAlternatives = 1;
+
+  voiceRecognition.onresult = (event) => {
+    const notesEl = document.getElementById('notes');
+    let finalText = '';
+    let interimText = '';
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result.isFinal) {
+        finalText += result[0].transcript;
+      } else {
+        interimText += result[0].transcript;
+      }
+    }
+
+    if (finalText) {
+      const cursor = notesEl.selectionStart;
+      const before = notesEl.value.substring(0, cursor);
+      const after = notesEl.value.substring(cursor);
+      notesEl.value = before + finalText + after;
+      notesEl.setSelectionRange(cursor + finalText.length, cursor + finalText.length);
+    }
+
+    const hint = document.getElementById('voiceHint');
+    if (interimText) {
+      hint.textContent = '识别中: ' + interimText;
+    } else {
+      hint.textContent = '正在聆听...';
+    }
+  };
+
+  voiceRecognition.onerror = (event) => {
+    const hint = document.getElementById('voiceHint');
+    switch (event.error) {
+      case 'not-allowed':
+        hint.textContent = '麦克风权限被拒绝，请在浏览器设置中允许';
+        break;
+      case 'no-speech':
+        hint.textContent = '未检测到语音，请再试一次';
+        break;
+      case 'audio-capture':
+        hint.textContent = '未找到麦克风设备';
+        break;
+      default:
+        hint.textContent = '语音识别出错: ' + event.error;
+    }
+    stopVoice();
+  };
+
+  voiceRecognition.onend = () => {
+    if (voiceRecording) {
+      try { voiceRecognition.start(); } catch(e) { stopVoice(); }
+    } else {
+      stopVoice();
+    }
+  };
+}
+
+function toggleVoice() {
+  if (voiceRecording) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  if (!voiceRecognition) return;
+  try {
+    voiceRecognition.start();
+    voiceRecording = true;
+    document.getElementById('btnVoice').classList.add('recording');
+    document.getElementById('btnVoice').title = '点击停止录音';
+    document.getElementById('voiceHint').classList.add('recording');
+    document.getElementById('voiceHint').textContent = '正在聆听...';
+  } catch (e) {
+    document.getElementById('voiceHint').textContent = '启动语音识别失败，请刷新后重试';
+  }
+}
+
+function stopVoice() {
+  voiceRecording = false;
+  try { voiceRecognition.stop(); } catch(e) {}
+  document.getElementById('btnVoice').classList.remove('recording');
+  document.getElementById('btnVoice').title = '语音录入';
+  document.getElementById('voiceHint').classList.remove('recording');
+  document.getElementById('voiceHint').textContent = '';
+}
+
+// 页面加载时初始化
+initVoice();
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
