@@ -198,19 +198,6 @@
       <input type="text" class="form-input" id="customerAddress" placeholder="请输入客户地址">
     </div>
     <div class="form-group">
-      <label class="form-label">衣物品类（必选 · 提升AI检测准确率）</label>
-      <select class="form-input" id="garmentType" style="appearance:auto;cursor:pointer;">
-        <option value="">请选择衣物品类</option>
-        <option value="上衣">上衣</option>
-        <option value="裤子">裤子</option>
-        <option value="裙子">裙子</option>
-        <option value="外套">外套</option>
-        <option value="连衣裙">连衣裙</option>
-        <option value="西装">西装</option>
-        <option value="其他">其他</option>
-      </select>
-    </div>
-    <div class="form-group">
       <label class="form-label">备注（选填 · 支持语音录入）</label>
       <div class="voice-group">
         <textarea class="form-input" id="notes" placeholder="如：客户口头说明的已知瑕疵等" rows="2"></textarea>
@@ -368,9 +355,6 @@ function goToUpload() {
   const phone = document.getElementById('customerPhone').value.trim();
   if (!phone) return toast('请先输入手机号码');
   if (!/^1[3-9]\d{9}$/.test(phone)) return toast('手机号码格式不正确');
-  const gtype = document.getElementById('garmentType').value;
-  if (!gtype) return toast('请选择衣物品类');
-
   document.getElementById('section-info').style.display = 'none';
   document.getElementById('section-upload').style.display = '';
   setStep(2);
@@ -566,7 +550,6 @@ async function submitIntake() {
   formData.append('customer_name', name);
   formData.append('customer_phone', phone);
   formData.append('customer_address', document.getElementById('customerAddress').value.trim());
-  formData.append('garment_type', document.getElementById('garmentType').value);
   formData.append('notes', document.getElementById('notes').value);
   formData.append('photos', JSON.stringify(uploadedFiles));
   if (videoFile) formData.append('video', videoFile, videoFile.name);
@@ -641,7 +624,6 @@ function resetIntake() {
   document.getElementById('customerName').value = '';
   document.getElementById('customerPhone').value = '';
   document.getElementById('customerAddress').value = '';
-  document.getElementById('garmentType').value = '';
   document.getElementById('notes').value = '';
   document.getElementById('section-result').style.display = 'none';
   document.getElementById('section-info').style.display = '';

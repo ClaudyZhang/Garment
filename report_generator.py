@@ -158,7 +158,7 @@ class ReportGenerator:
       </div>
       <div class="info-item">
         <div class="label">衣物品类</div>
-        <div class="value">{garment_data.get('garment_type', '-') or '未指定'}</div>
+        <div class="value">{garment_data.get('garment_type', '-') or '-'}</div>
       </div>
     </div>
   </div>

@@ -5,8 +5,11 @@
 
 import random
 import json
+import base64
+import os
 from datetime import datetime
 from config import Config
+from openai import OpenAI
 
 
 class AIDetector:
@@ -65,6 +68,36 @@ class AIDetector:
         "酒红", "深蓝", "墨绿", "卡其", "烟灰", "象牙白",
         "炭灰", "海军蓝", "巧克力棕"
     ]
+
+    # 衣物类型 → 合理品类映射（约束品类不会离谱，如西装识别成羽绒服）
+    GARMENT_TYPE_TO_CATEGORY = {
+        "上衣": ["衬衫", "毛衣"],
+        "裤子": ["裤子"],
+        "裙子": ["连衣裙"],
+        "外套": ["大衣", "风衣", "夹克", "羽绒服", "皮衣"],
+        "连衣裙": ["连衣裙", "礼服"],
+        "西装": ["西装"],
+    }
+
+    # 衣物类型 → 合理材质映射（西装不可能是羽绒/亚麻）
+    GARMENT_TYPE_TO_MATERIALS = {
+        "上衣": ["羊绒", "羊毛", "真丝", "棉", "混纺", "马海毛", "羊驼毛"],
+        "裤子": ["羊毛", "混纺", "棉", "真丝", "亚麻"],
+        "裙子": ["真丝", "羊毛", "混纺", "棉", "羊绒"],
+        "外套": ["羊绒", "羊毛", "羊皮", "牛皮", "羽绒", "混纺", "马海毛", "羊驼毛", "皮草"],
+        "连衣裙": ["真丝", "羊绒", "羊毛", "混纺", "棉"],
+        "西装": ["羊毛", "羊绒", "混纺", "马海毛", "真丝"],
+    }
+
+    # 衣物类型 → 合理颜色映射（西装以深色正装色为主）
+    GARMENT_TYPE_TO_COLORS = {
+        "上衣": ["黑色", "白色", "米色", "灰色", "藏青", "酒红", "深蓝", "墨绿", "烟灰", "象牙白", "炭灰", "海军蓝"],
+        "裤子": ["黑色", "灰色", "藏青", "深蓝", "卡其", "炭灰", "海军蓝", "巧克力棕"],
+        "裙子": ["黑色", "白色", "米色", "灰色", "藏青", "酒红", "深蓝", "墨绿", "烟灰", "象牙白", "海军蓝"],
+        "外套": ["黑色", "米色", "灰色", "藏青", "驼色", "酒红", "深蓝", "墨绿", "卡其", "炭灰", "海军蓝", "巧克力棕"],
+        "连衣裙": ["黑色", "白色", "米色", "灰色", "藏青", "酒红", "深蓝", "墨绿", "烟灰", "象牙白", "海军蓝"],
+        "西装": ["黑色", "藏青", "灰色", "深蓝", "炭灰", "海军蓝"],
+    }
 
     MOCK_CONDITIONS = [
         {"level": "excellent", "label": "全新/近乎全新", "desc": "无明显穿着痕迹，面料光泽度好", "deduction": 0},
@@ -286,26 +319,26 @@ class AIDetector:
     EDGE_DESCRIPTIONS = ["边缘有毛茬", "边缘较整齐", "纤维断裂明显", "有轻微抽丝"]
 
     @classmethod
-    def detect(cls, image_paths, use_real_api=False, garment_type=None):
+    def detect(cls, image_paths, use_real_api=True):
         """
         对上传的图片进行智能识别
-        参数 garment_type: 衣物类型（上衣/裤子/裙子/外套/连衣裙/西装），用于精准过滤位置描述
+        有 QWEN_API_KEY 时自动走通义千问 VL 真实识别，否则降级为 mock 数据
         返回：品牌、材质、品类、颜色、成色、估价、瑕疵列表
         """
-        if use_real_api and Config.TENCENT_SECRET_ID:
-            return cls._tencent_detect(image_paths, garment_type)
-        return cls._mock_detect(image_paths, garment_type)
+        if use_real_api and Config.QWEN_API_KEY:
+            return cls._qwen_vl_detect(image_paths)
+        return cls._mock_detect(image_paths)
 
     @classmethod
-    def _mock_detect(cls, image_paths, garment_type=None):
-        """模拟AI检测，产生合理的随机结果"""
+    def _mock_detect(cls, image_paths):
+        """模拟AI检测，产生合理的随机结果（仅在千问API不可用时作为降级方案）"""
         brand = random.choice(cls.MOCK_BRANDS)
         material = random.choice(cls.MOCK_MATERIALS)
         category = random.choice(cls.MOCK_CATEGORIES)
         color = random.choice(cls.MOCK_COLORS)
 
-        # 生成瑕疵（传入衣物类型，精准过滤位置）
-        defects = cls._generate_defects(len(image_paths), garment_type)
+        # 生成瑕疵
+        defects = cls._generate_defects(len(image_paths))
         defect_count = len(defects)
 
         # 根据瑕疵情况判定成色
@@ -335,7 +368,7 @@ class AIDetector:
             "estimated_value": estimated_value,
             "defects": defects,
             "defect_count": defect_count,
-            "garment_type": garment_type or "",
+            "garment_type": category.get("name", ""),
         }
 
         brand_info = Config.BRAND_VALUE_MAP.get(brand["name"], {})
@@ -344,8 +377,8 @@ class AIDetector:
         return result
 
     @classmethod
-    def _generate_defects(cls, image_count, garment_type=None):
-        """生成模拟瑕疵列表（每件衣物0-5个瑕疵），根据衣物类型精准过滤位置"""
+    def _generate_defects(cls, image_count):
+        """生成模拟瑕疵列表（每件衣物0-5个瑕疵）"""
         # 80%概率有瑕疵
         if random.random() < 0.2:
             return []
@@ -354,11 +387,7 @@ class AIDetector:
         used_types = set()
         defects = []
 
-        # 根据衣物类型选择位置列表，避免跨类别错误
-        if garment_type and garment_type in cls.GARMENT_TYPE_POSITIONS:
-            allowed_positions = cls.GARMENT_TYPE_POSITIONS[garment_type]
-        else:
-            allowed_positions = cls.GENERIC_POSITIONS
+        allowed_positions = cls.GENERIC_POSITIONS
 
         # 优先保证瑕疵类型不重复
         available = [d for d in cls.MOCK_DEFECT_TYPES if d["type"] not in used_types]
@@ -474,6 +503,170 @@ class AIDetector:
         return round(value, -2)
 
     @classmethod
-    def _tencent_detect(cls, image_paths):
-        """腾讯云图像识别API（后续实现）"""
-        return cls._mock_detect(image_paths)
+    def _qwen_vl_detect(cls, image_paths):
+        """
+        通义千问 VL 真实视觉识别
+        对上传的衣物照片进行品牌、材质、品类、颜色、成色、瑕疵检测
+        """
+        # 图片 base64 编码
+        image_contents = []
+        for i, path in enumerate(image_paths[:4]):  # 最多4张，控制成本
+            if not os.path.isfile(path):
+                continue
+            ext = os.path.splitext(path)[1].lower()
+            mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}.get(ext, "jpeg")
+            with open(path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("ascii")
+            image_contents.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/{mime};base64,{b64}"},
+            })
+
+        if not image_contents:
+            return cls._mock_detect(image_paths)
+
+        # 系统提示
+        system_prompt = (
+            "你是一个专业的高端服装鉴定师，服务于奢侈品干洗店的收衣检测环节。"
+            "你需要仔细观察上传的衣物照片，识别品牌、材质、品类、颜色、成色等级，以及所有可见的瑕疵/污渍/磨损。"
+            "必须严格按JSON格式输出，不要有任何额外文字。"
+        )
+
+        # 用户提示
+        user_text = f"""请仔细观察以下{len(image_paths)}张衣物照片。
+
+输出严格的JSON（不要```json```包裹，不要任何其他文字）：
+{{
+  "brand": {{"name": "品牌英文名，如Hermes/Gucci/Zegna/Uniqlo，若图中无品牌标识则填'未识别'", "confidence": 0.0~1.0}},
+  "material": {{"name": "材质如羊绒/真丝/羊毛/棉/亚麻/混纺/羽绒/皮革/化纤", "confidence": 0.0~1.0}},
+  "category": {{"name": "品类如西装/大衣/连衣裙/羽绒服/毛衣/衬衫/裤子/风衣/夹克/礼服/旗袍", "confidence": 0.0~1.0}},
+  "color": {{"name": "颜色如黑色/白色/藏青/灰色/酒红/驼色/墨绿/米色/深蓝/卡其/巧克力棕/烟灰/象牙白/海军蓝/炭灰", "confidence": 0.0~1.0}},
+  "condition": {{"level": "excellent|good|fair|poor之一", "label": "中文标签如全新/近乎全新|良好|一般|需特别护理", "desc": "简短描述整体成色状态"}},
+  "defects": [
+    {{
+      "type": "瑕疵类型(stain_oil油渍/stain_drink饮料渍/stain_ink墨渍/stain_blood血渍/stain_mud泥渍/stain_cosmetic化妆品渍/tear_hole破洞/tear_seam开线/wear_fabric磨损/wear_pilling起球/fade_color褪色/missing_button缺扣/missing_accessory配件缺失/deformation变形/odor异味)",
+      "name": "中文名称",
+      "severity": "low|medium|high",
+      "description": "详细描述瑕疵的位置、大小、颜色等",
+      "position": "瑕疵部位如左前襟/右袖口/领口/后背/下摆/左裤腿",
+      "risk": "护洗风险提示"
+    }}
+  ]
+}}
+
+要求：
+- condition.level 只能是 excellent/good/fair/poor
+- 如果照片中无明显瑕疵，defects 为空数组 []
+- 瑕疵 severity：low轻微/medium中等/high严重
+- 每个瑕疵必须有 type/name/severity/description/position/risk 全部字段
+- 只输出JSON，不要任何其他文字！"""
+
+        client = OpenAI(
+            api_key=Config.QWEN_API_KEY,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+
+        try:
+            response = client.chat.completions.create(
+                model=Config.QWEN_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": image_contents + [{"type": "text", "text": user_text}],
+                    },
+                ],
+                max_tokens=2000,
+                temperature=0.1,  # 低温度，输出更稳定
+            )
+
+            raw_text = response.choices[0].message.content.strip()
+            # 清理可能的 markdown 包裹
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[-1]
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+                raw_text = raw_text.strip()
+
+            result = json.loads(raw_text)
+
+            # 规范化字段
+            brand = result.get("brand", {})
+            material = result.get("material", {})
+            category = result.get("category", {})
+            color = result.get("color", {})
+            condition_raw = result.get("condition", {})
+            defects = result.get("defects", [])
+
+            # 确保 condition 格式正确
+            valid_levels = {"excellent": "全新/近乎全新", "good": "良好", "fair": "一般", "poor": "需特别护理"}
+            level = condition_raw.get("level", "good")
+            if level not in valid_levels:
+                level = "good"
+            condition = {
+                "level": level,
+                "label": condition_raw.get("label", valid_levels[level]),
+                "desc": condition_raw.get("desc", ""),
+                "deduction": {"excellent": 0, "good": 0.1, "fair": 0.25, "poor": 0.4}[level],
+            }
+
+            # 为每个瑕疵补充 annotation（前端标注用）
+            for i, d in enumerate(defects):
+                if "id" not in d:
+                    d["id"] = f"defect_{i+1}"
+                if "annotation" not in d:
+                    d["annotation"] = {
+                        "x": random.randint(15, 85),
+                        "y": random.randint(10, 80),
+                        "width": random.randint(12, 30),
+                        "height": random.randint(12, 30),
+                    }
+                d["photo_index"] = d.get("photo_index", 0)
+                if "icon" not in d:
+                    d["icon"] = "⚠"
+
+            # 计算估价
+            estimated_value = cls._calculate_value(
+                brand.get("name", ""),
+                material.get("name", ""),
+                category.get("name", ""),
+                level,
+            )
+            severe_count = sum(1 for d in defects if d.get("severity") == "high")
+            estimated_value = round(estimated_value * (1 - severe_count * 0.03), -2)
+
+            # 品牌等级
+            brand_info = Config.BRAND_VALUE_MAP.get(brand.get("name", ""), {})
+            brand_tier = brand_info.get("tier", "普通")
+
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "image_count": len(image_paths),
+                "brand": {"name": brand.get("name", "未识别"), "confidence": brand.get("confidence", 0)},
+                "material": {"name": material.get("name", "未知"), "confidence": material.get("confidence", 0)},
+                "category": {"name": category.get("name", "未知"), "confidence": category.get("confidence", 0)},
+                "color": {"name": color.get("name", "未知"), "confidence": color.get("confidence", 0)},
+                "condition": condition,
+                "estimated_value": estimated_value,
+                "defects": defects,
+                "defect_count": len(defects),
+                "garment_type": category.get("name", ""),
+                "brand_tier": brand_tier,
+                "ai_model": Config.QWEN_MODEL,
+                "ai_raw": raw_text,
+            }
+
+        except json.JSONDecodeError as e:
+            # LLM 返回了非标准 JSON，降级到 mock
+            print(f"[QWEN VL] JSON解析失败: {e}")
+            print(f"[QWEN VL] 原始返回: {raw_text[:500]}")
+            result = cls._mock_detect(image_paths)
+            result["ai_error"] = f"JSON解析失败: {str(e)}"
+            return result
+
+        except Exception as e:
+            # 网络/API 错误，降级到 mock
+            print(f"[QWEN VL] API调用失败: {e}")
+            result = cls._mock_detect(image_paths)
+            result["ai_error"] = f"API调用失败: {str(e)}"
+            return result

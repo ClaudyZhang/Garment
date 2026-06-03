@@ -123,11 +123,14 @@ def process_intake():
     if not re.match(r'^1[3-9]\d{9}$', phone):
         return jsonify({"success": False, "error": "手机号码格式不正确，请输入有效的11位手机号"}), 400
 
-    garment_type = data.get("garment_type", "").strip()
-
-    # 1. AI检测（传入衣物类型，精准过滤位置描述）
+    # AI检测（千问VL真实视觉识别，品类由AI从照片识别）
     image_paths = [os.path.join(Config.UPLOAD_FOLDER, p) for p in photos]
-    detection = AIDetector.detect(image_paths, garment_type=garment_type)
+    detection = AIDetector.detect(image_paths)
+
+    # 品类由 AI 从照片中识别（不再依赖用户手动输入）
+    garment_type = detection["category"]["name"]
+
+    # 1. AI检测
 
     # 2. 生成订单号并保存
     order_no = generate_order_no()

@@ -16,10 +16,10 @@ class Config:
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "mp4"}
 
-    # 腾讯云AI（后续配置真实密钥）
-    TENCENT_SECRET_ID = os.environ.get("TENCENT_SECRET_ID", "")
-    TENCENT_SECRET_KEY = os.environ.get("TENCENT_SECRET_KEY", "")
-    TENCENT_REGION = "ap-shanghai"
+    # 通义千问 VL 视觉识别（阿里云百炼）
+    # 获取 API Key: https://bailian.console.aliyun.com → 模型广场 → qwen-vl-max → API-KEY
+    QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "sk-cd4b27c0632f4c7dbcef21984a40d981")
+    QWEN_MODEL = os.environ.get("QWEN_MODEL", "qwen-vl-max")
 
     # 阿里云短信（后续配置真实密钥）
     ALIYUN_SMS_ACCESS_KEY = os.environ.get("ALIYUN_SMS_ACCESS_KEY", "")
